@@ -1,26 +1,31 @@
 <!doctype html>
 <html lang="en">
 <head>
-    <title>Happy Hebrew Language Week 2026 ! שבוע השפה העברית ה'תשפ"ו שמח</title>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Happy Hebrew Language Week 2026 ! שבוע השפה העברית ה'תשפ"ו שמח</title>
   <style>
+    :root { --maxw: 900px; }
+
     body {
       font-family: system-ui, -apple-system, Segoe UI, Roboto, sans-serif;
       margin: 0;
       min-height: 100vh;
-      display: flex;
-      justify-content: center;
-      align-items: center;
+      background: #fff;
     }
 
-    .container {
-      width: 100%;
-      max-width: 900px;
-      padding: 24px;
+    .stage {
+      position: fixed;
+      left: 50%;
+      transform: translateX(-50%);
+      width: min(var(--maxw), calc(100vw - 48px));
+      transition: top 220ms ease;
+      padding: 24px 0;
       box-sizing: border-box;
-      text-align: center;
     }
+
+    body.centered .stage { top: calc(50vh - 64px); }
+    body.topped .stage   { top: 18px; }
 
     input[type="text"] {
       width: 100%;
@@ -30,31 +35,47 @@
       border-radius: 8px;
       outline: none;
       box-sizing: border-box;
+      text-align: center; /* center writing in textbox */
     }
 
     #output {
-      margin-top: 20px;
+      margin-top: 16px;
       display: flex;
       justify-content: center;
     }
 
-    ul {
-      margin: 0;
-      padding-left: 20px;
+    #scrollBox {
+      width: 100%;
+      border: 1px solid #e5e5e5;
+      border-radius: 10px;
+      background: #fafafa;
+      overflow-y: auto;
+      box-sizing: border-box;
+      padding: 10px 12px;
       text-align: start;
     }
+
+    ul, ol {
+      margin: 0;
+      padding-left: 22px;
+    }
+
+    .keyLine strong { font-weight: 700; }
   </style>
 </head>
-<body>
-  <div class="container">
+<body class="centered">
+  <div class="stage">
     <input
       id="keyInput"
       type="text"
       placeholder="Loading ... טוען"
       autocomplete="off"
       disabled
+      dir="ltr"
     />
-    <div id="output"></div>
+    <div id="output">
+      <div id="scrollBox" style="display:none;"></div>
+    </div>
   </div>
 
   <script>
@@ -62,9 +83,10 @@
     const FILE_2 = "heb_sigs.json.gz";
 
     let mapping = {};
+    let maxListLen = 0;
 
     const inputEl = document.getElementById("keyInput");
-    const outputEl = document.getElementById("output");
+    const scrollBox = document.getElementById("scrollBox");
 
     function sortKey(s) {
       return [...s.trim().normalize("NFC")]
@@ -73,39 +95,111 @@
     }
 
     function startsWithHebrew(s) {
-      if (!s) return false;
-      const ch = [...s.trim()][0];
+      const t = s.trim();
+      if (!t) return false;
+      const ch = [...t][0];
       return /\p{Script=Hebrew}/u.test(ch);
     }
 
-    function render(words, rtl) {
-      outputEl.replaceChildren();
-      if (!words || words.length === 0) return;
+    function setInputDirFromValue() {
+      const t = inputEl.value.trim();
+      if (!t) return; // keep last dir when empty (feels nicer while editing)
+      inputEl.dir = startsWithHebrew(t) ? "rtl" : "ltr";
+    }
 
-      const ul = document.createElement("ul");
-      ul.dir = rtl ? "rtl" : "ltr";
+    function setLayoutMode() {
+      const hasText = !!inputEl.value.trim();
+      const hasFocus = document.activeElement === inputEl;
+      document.body.className = (!hasText && !hasFocus) ? "centered" : "topped";
+    }
 
-      for (const w of words) {
+    function setScrollBoxMaxHeight() {
+      const probeWrap = document.createElement("div");
+      const probeUl = document.createElement("ul");
+      const probeLi = document.createElement("li");
+      probeLi.textContent = "X";
+      probeUl.appendChild(probeLi);
+      probeUl.style.margin = "0";
+      probeUl.style.paddingLeft = "22px";
+      probeWrap.appendChild(probeUl);
+
+      scrollBox.replaceChildren(probeWrap);
+      scrollBox.style.display = "";
+
+      const lineH = Math.max(18, Math.round(probeLi.getBoundingClientRect().height || 20));
+      scrollBox.replaceChildren();
+
+      const items = 1 + maxListLen; // 1 bullet line + list lines
+      const padding = 10 + 10 + 4;
+      const desired = items * lineH + padding;
+      const cap = Math.max(160, Math.floor(window.innerHeight * 0.60));
+      scrollBox.style.maxHeight = Math.min(desired, cap) + "px";
+    }
+
+    function escapeHtml(s) {
+      return String(s)
+        .replaceAll("&", "&amp;")
+        .replaceAll("<", "&lt;")
+        .replaceAll(">", "&gt;")
+        .replaceAll('"', "&quot;")
+        .replaceAll("'", "&#39;");
+    }
+
+    function renderList(sortedKey, words, rtl) {
+      scrollBox.replaceChildren();
+
+      if (!sortedKey) {
+        scrollBox.style.display = "none";
+        return;
+      }
+
+      const arr = Array.isArray(words) ? words.slice() : [];
+      const count = arr.length;
+
+      arr.sort((a, b) => String(a).localeCompare(String(b)));
+
+      const wrapper = document.createElement("div");
+      wrapper.dir = rtl ? "rtl" : "ltr";
+
+      const ulKey = document.createElement("ul");
+      ulKey.className = "keyLine";
+      const liKey = document.createElement("li");
+      liKey.innerHTML = `<strong>${escapeHtml(sortedKey)}</strong> (${count})`;
+      ulKey.appendChild(liKey);
+
+      const ol = document.createElement("ol");
+      for (const w of arr) {
         const li = document.createElement("li");
         li.textContent = w;
-        ul.appendChild(li);
+        ol.appendChild(li);
       }
-      outputEl.appendChild(ul);
+
+      wrapper.appendChild(ulKey);
+      wrapper.appendChild(ol);
+
+      scrollBox.appendChild(wrapper);
+      scrollBox.style.display = "";
     }
 
     function updateLookup() {
-      const raw = inputEl.value;
-      if (!raw.trim()) return render([]);
+      setInputDirFromValue();
+      setLayoutMode();
 
-      const key = sortKey(raw);
-      const words = Object.prototype.hasOwnProperty.call(mapping, key)
-        ? mapping[key]
-        : [];
+      const trimmed = inputEl.value.trim();
+      if (!trimmed) return renderList("", [], false);
 
-      render(Array.isArray(words) ? words : [], startsWithHebrew(raw));
+      const key = sortKey(trimmed);
+      const words = Object.prototype.hasOwnProperty.call(mapping, key) ? mapping[key] : [];
+      renderList(key, words, startsWithHebrew(trimmed));
     }
 
     inputEl.addEventListener("input", updateLookup);
+    inputEl.addEventListener("focus", () => { setLayoutMode(); updateLookup(); });
+    inputEl.addEventListener("blur",  () => { setLayoutMode(); updateLookup(); });
+
+    window.addEventListener("resize", () => {
+      if (maxListLen > 0) setScrollBoxMaxHeight();
+    });
 
     async function gunzipToText(uint8) {
       if (!("DecompressionStream" in window)) {
@@ -121,7 +215,6 @@
       if (!resp.ok) throw new Error(`Fetch failed for ${url}`);
       const buf = await resp.arrayBuffer();
       const text = await gunzipToText(new Uint8Array(buf));
-
       const obj = JSON.parse(text);
       if (obj === null || typeof obj !== "object" || Array.isArray(obj)) {
         throw new Error("JSON root must be an object");
@@ -132,9 +225,7 @@
     function normalizeAndSortMapping(obj) {
       const out = {};
       for (const [k, v] of Object.entries(obj)) {
-        const sk = sortKey(k)
-          .replace(/[\u200E\u200F]/g, "")
-          .trim();
+        const sk = sortKey(k).replace(/[\u200E\u200F]/g, "").trim();
         out[sk] = v;
       }
       return out;
@@ -157,20 +248,33 @@
       }
     }
 
+    function computeMaxListLen(mapObj) {
+      let m = 0;
+      for (const v of Object.values(mapObj)) {
+        if (Array.isArray(v)) m = Math.max(m, v.length);
+      }
+      return m;
+    }
+
     (async () => {
-      const [m1, m2] = await Promise.all([
+      const [m1raw, m2raw] = await Promise.all([
         fetchAndLoadGzJson(FILE_1),
         fetchAndLoadGzJson(FILE_2),
       ]);
 
       const merged = {};
-      mergeMappings(merged, normalizeAndSortMapping(m1));
-      mergeMappings(merged, normalizeAndSortMapping(m2));
+      mergeMappings(merged, normalizeAndSortMapping(m1raw));
+      mergeMappings(merged, normalizeAndSortMapping(m2raw));
       mapping = merged;
 
+      maxListLen = computeMaxListLen(mapping);
+
       inputEl.disabled = false;
-      inputEl.placeholder = "Enter a word כתבו משהו כאן";
-      inputEl.focus();
+      inputEl.placeholder = "What words can you extract from these letters ? איזה מילים מתחבאות באותיות האלה";
+
+      if (maxListLen > 0) setScrollBoxMaxHeight();
+
+      setLayoutMode();
       updateLookup();
     })().catch(() => {
       // intentionally silent
