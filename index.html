@@ -138,7 +138,7 @@
     const fileStatus = document.getElementById("fileStatus");
 
     function sortKey(s) {
-        return [...s.trim().normalize("NFC")]
+        return [...s.trim().toLowerCase().normalize("NFC")]
             .sort((a, b) => a.localeCompare(b))
             .join("");
     }
