@@ -197,16 +197,22 @@
     }
 
     function renderResults(results) {
-        scrollBox.replaceChildren();
-
         if (!results || results.length === 0) {
             scrollBox.style.display = "none";
+            scrollBox.replaceChildren();
             return;
         }
+
+        // Use DocumentFragment for better performance
+        const fragment = document.createDocumentFragment();
 
         for (const {sortedKey, words, rtl} of results) {
             const arr = Array.isArray(words) ? words.slice() : [];
             const count = arr.length;
+            
+            // Skip empty results
+            if (count === 0) continue;
+            
             arr.sort((a, b) => String(a).localeCompare(String(b)));
 
             const wrapper = document.createElement("div");
@@ -229,11 +235,15 @@
             wrapper.appendChild(ulKey);
             wrapper.appendChild(ol);
 
-            scrollBox.appendChild(wrapper);
+            fragment.appendChild(wrapper);
         }
 
+        // Single DOM update
+        scrollBox.replaceChildren(fragment);
         scrollBox.style.display = "";
     }
+
+    let debounceTimer = null;
 
     function updateLookup() {
         setInputDirFromValue();
@@ -248,27 +258,9 @@
 
         for (const inputWord of inputWords) {
             const key = sortKey(inputWord);
-            const inputLetters = new Set([...key]);
             
-            // Only search mappings that contain all letters of the input word
-            const words = [];
-            for (const [mapKey, mapWords] of Object.entries(mapping)) {
-                const mapLetterSet = mappingLetters[mapKey];
-                if (!mapLetterSet) continue;
-                
-                // Check if all input letters are in this mapping
-                let allLettersPresent = true;
-                for (const letter of inputLetters) {
-                    if (!mapLetterSet.has(letter)) {
-                        allLettersPresent = false;
-                        break;
-                    }
-                }
-                
-                if (allLettersPresent && mapKey === key) {
-                    words.push(...mapWords);
-                }
-            }
+            // Direct lookup - much faster than iterating all mappings
+            const words = mapping[key] || [];
             
             results.push({
                 sortedKey: key,
@@ -280,7 +272,22 @@
         renderResults(results);
     }
 
-    inputEl.addEventListener("input", updateLookup);
+    function debouncedUpdateLookup() {
+        if (debounceTimer) {
+            clearTimeout(debounceTimer);
+        }
+        
+        // Update UI immediately for better responsiveness
+        setInputDirFromValue();
+        setLayoutMode();
+        
+        // Debounce the actual search
+        debounceTimer = setTimeout(() => {
+            updateLookup();
+        }, 300);
+    }
+
+    inputEl.addEventListener("input", debouncedUpdateLookup);
     inputEl.addEventListener("focus", updateLookup);
     inputEl.addEventListener("blur", updateLookup);
 
