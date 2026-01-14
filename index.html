@@ -128,6 +128,7 @@
     const FILE_2 = "heb_sigs.json.gz";
 
     let mapping = {};
+    let mappingLetters = {}; // Set of letters in each mapping key
     let maxListLen = 0;
 
     const inputEl = document.getElementById("keyInput");
@@ -195,38 +196,42 @@
             .replaceAll("'", "&#39;");
     }
 
-    function renderList(sortedKey, words, rtl) {
+    function renderResults(results) {
         scrollBox.replaceChildren();
 
-        if (!sortedKey) {
+        if (!results || results.length === 0) {
             scrollBox.style.display = "none";
             return;
         }
 
-        const arr = Array.isArray(words) ? words.slice() : [];
-        const count = arr.length;
-        arr.sort((a, b) => String(a).localeCompare(String(b)));
+        for (const {sortedKey, words, rtl} of results) {
+            const arr = Array.isArray(words) ? words.slice() : [];
+            const count = arr.length;
+            arr.sort((a, b) => String(a).localeCompare(String(b)));
 
-        const wrapper = document.createElement("div");
-        wrapper.dir = rtl ? "rtl" : "ltr";
+            const wrapper = document.createElement("div");
+            wrapper.dir = rtl ? "rtl" : "ltr";
+            wrapper.style.marginBottom = "16px";
 
-        const ulKey = document.createElement("ul");
-        ulKey.className = "keyLine";
-        const liKey = document.createElement("li");
-        liKey.innerHTML = `<strong>${escapeHtml(sortedKey)}</strong> (${count})`;
-        ulKey.appendChild(liKey);
+            const ulKey = document.createElement("ul");
+            ulKey.className = "keyLine";
+            const liKey = document.createElement("li");
+            liKey.innerHTML = `<strong>${escapeHtml(sortedKey)}</strong> (${count})`;
+            ulKey.appendChild(liKey);
 
-        const ol = document.createElement("ol");
-        for (const w of arr) {
-            const li = document.createElement("li");
-            li.textContent = w;
-            ol.appendChild(li);
+            const ol = document.createElement("ol");
+            for (const w of arr) {
+                const li = document.createElement("li");
+                li.textContent = w;
+                ol.appendChild(li);
+            }
+
+            wrapper.appendChild(ulKey);
+            wrapper.appendChild(ol);
+
+            scrollBox.appendChild(wrapper);
         }
 
-        wrapper.appendChild(ulKey);
-        wrapper.appendChild(ol);
-
-        scrollBox.appendChild(wrapper);
         scrollBox.style.display = "";
     }
 
@@ -235,11 +240,44 @@
         setLayoutMode();
 
         const trimmed = inputEl.value.trim();
-        if (!trimmed) return renderList("", [], false);
+        if (!trimmed) return renderResults([]);
 
-        const key = sortKey(trimmed);
-        const words = Object.prototype.hasOwnProperty.call(mapping, key) ? mapping[key] : [];
-        renderList(key, words, startsWithHebrew(trimmed));
+        // Split by spaces and search each word separately
+        const inputWords = trimmed.split(/\s+/).filter(w => w);
+        const results = [];
+
+        for (const inputWord of inputWords) {
+            const key = sortKey(inputWord);
+            const inputLetters = new Set([...key]);
+            
+            // Only search mappings that contain all letters of the input word
+            const words = [];
+            for (const [mapKey, mapWords] of Object.entries(mapping)) {
+                const mapLetterSet = mappingLetters[mapKey];
+                if (!mapLetterSet) continue;
+                
+                // Check if all input letters are in this mapping
+                let allLettersPresent = true;
+                for (const letter of inputLetters) {
+                    if (!mapLetterSet.has(letter)) {
+                        allLettersPresent = false;
+                        break;
+                    }
+                }
+                
+                if (allLettersPresent && mapKey === key) {
+                    words.push(...mapWords);
+                }
+            }
+            
+            results.push({
+                sortedKey: key,
+                words: words,
+                rtl: startsWithHebrew(inputWord)
+            });
+        }
+
+        renderResults(results);
     }
 
     inputEl.addEventListener("input", updateLookup);
@@ -264,6 +302,14 @@
             out[sortKey(k).replace(/[\u200E\u200F]/g, "").trim()] = v;
         }
         return out;
+    }
+
+    function buildLetterSets(mapObj) {
+        const letterSets = {};
+        for (const key of Object.keys(mapObj)) {
+            letterSets[key] = new Set([...key]);
+        }
+        return letterSets;
     }
 
     function mergeMappings(target, src) {
@@ -322,6 +368,7 @@
             const newMapping = buildMappingFromWords(words);
             
             mergeMappings(mapping, newMapping);
+            mappingLetters = buildLetterSets(mapping);
             maxListLen = computeMaxListLen(mapping);
             setScrollBoxMaxHeight();
             
@@ -348,6 +395,7 @@
         mergeMappings(merged, normalizeAndSortMapping(await fetchAndLoadGzJson(FILE_1)));
         mergeMappings(merged, normalizeAndSortMapping(await fetchAndLoadGzJson(FILE_2)));
         mapping = merged;
+        mappingLetters = buildLetterSets(mapping);
 
         maxListLen = computeMaxListLen(mapping);
 
