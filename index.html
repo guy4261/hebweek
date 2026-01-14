@@ -45,6 +45,37 @@
             text-align: center;
         }
 
+        .fileUpload {
+            margin-top: 12px;
+            display: flex;
+            justify-content: center;
+            gap: 8px;
+            align-items: center;
+        }
+
+        .fileUpload label {
+            cursor: pointer;
+            padding: 8px 16px;
+            background: #007bff;
+            color: white;
+            border-radius: 6px;
+            font-size: 14px;
+            transition: background 0.2s;
+        }
+
+        .fileUpload label:hover {
+            background: #0056b3;
+        }
+
+        .fileUpload input[type="file"] {
+            display: none;
+        }
+
+        .fileUpload .status {
+            font-size: 13px;
+            color: #666;
+        }
+
         #output {
             margin-top: 16px;
             display: flex;
@@ -74,7 +105,7 @@
 </head>
 <body class="centered">
 <div class="stage">
-    <input
+        <input
             id="keyInput"
             type="text"
             placeholder="Loading ... טוען"
@@ -82,6 +113,11 @@
             disabled
             dir="ltr"
     />
+    <div class="fileUpload">
+        <label for="fileInput">Load Custom Word List</label>
+        <input type="file" id="fileInput" accept=".txt" />
+        <span class="status" id="fileStatus"></span>
+    </div>
     <div id="output">
         <div id="scrollBox" style="display:none;"></div>
     </div>
@@ -96,6 +132,8 @@
 
     const inputEl = document.getElementById("keyInput");
     const scrollBox = document.getElementById("scrollBox");
+    const fileInput = document.getElementById("fileInput");
+    const fileStatus = document.getElementById("fileStatus");
 
     function sortKey(s) {
         return [...s.trim().normalize("NFC")]
@@ -252,6 +290,58 @@
         }
         return m;
     }
+
+    function buildMappingFromWords(words) {
+        const newMapping = {};
+        for (const word of words) {
+            const trimmed = word.trim();
+            if (!trimmed) continue;
+            
+            const key = sortKey(trimmed);
+            if (!Object.prototype.hasOwnProperty.call(newMapping, key)) {
+                newMapping[key] = [];
+            }
+            // Avoid duplicates within this file
+            if (!newMapping[key].includes(trimmed)) {
+                newMapping[key].push(trimmed);
+            }
+        }
+        return newMapping;
+    }
+
+    async function handleFileUpload(event) {
+        const file = event.target.files[0];
+        if (!file) return;
+
+        fileStatus.textContent = "Loading...";
+        fileStatus.style.color = "#666";
+
+        try {
+            const text = await file.text();
+            const words = text.split(/\r?\n/);
+            const newMapping = buildMappingFromWords(words);
+            
+            mergeMappings(mapping, newMapping);
+            maxListLen = computeMaxListLen(mapping);
+            setScrollBoxMaxHeight();
+            
+            const wordCount = words.filter(w => w.trim()).length;
+            const sigCount = Object.keys(newMapping).length;
+            fileStatus.textContent = `Loaded ${wordCount} words (${sigCount} signatures)`;
+            fileStatus.style.color = "#28a745";
+            
+            updateLookup();
+        } catch (error) {
+            fileStatus.textContent = "Error loading file";
+            fileStatus.style.color = "#dc3545";
+            console.error("File upload error:", error);
+        }
+
+        // Reset input so the same file can be reloaded
+        event.target.value = "";
+    }
+
+    fileInput.addEventListener("change", handleFileUpload);
 
     (async () => {
         const merged = {};
